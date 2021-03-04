@@ -36,6 +36,7 @@
 #include "arm-powerctl.h"
 
 #include "hw/arm/t8030.h"
+#include "hw/arm/t8030_usb.h"
 
 #include "hw/irq.h"
 #include "hw/or-irq.h"
@@ -474,6 +475,37 @@ static void T8030_create_s3c_uart(const T8030MachineState *tms, Chardev *chr)
     //pass a dummy irq as we don't need nor want interrupts for this UART
     DeviceState *dev = exynos4210_uart_create(base, 256, 0, chr, irq);
     assert(dev!=NULL);
+}
+
+static void T8030_create_usb(const T8030MachineState *tms)
+{
+    hwaddr addr;
+    hwaddr size;
+
+    // Fetch the usb-drd mmio address
+    DTBNode *child = get_dtb_child_node_by_name(tms->device_tree, "arm-io");
+    assert(child != NULL);
+    child = get_dtb_child_node_by_name(child, "usb-drd");
+    assert(child != NULL);
+
+    // Make sure this node has the configuration-string prop
+    DTBProp* prop = get_dtb_prop(child, "configuration-string");
+    assert(prop != NULL);
+
+    // The reg property contains the offset and size values. There are 3
+    // such values
+    prop = get_dtb_prop(child, "reg");
+    assert(prop != NULL);
+    hwaddr *reg = (hwaddr *)prop->value;
+
+    for (int i = 0; i < 3; i++)
+    {
+        addr = tms->soc_base_pa + reg[2 * i];
+        size = reg[2 * i + 1];
+
+        DeviceState *dev = t8030_usb_create(addr, size);
+        assert(dev!=NULL);
+    }
 }
 
 static void T8030_patch_kernel(AddressSpace *nsas)
@@ -995,6 +1027,8 @@ static void T8030_machine_init(MachineState *machine)
     T8030_create_aic(machine);
     
     T8030_create_s3c_uart(tms, serial_hd(0));
+
+    T8030_create_usb(tms);
 
     T8030_pmgr_setup(machine);
 
