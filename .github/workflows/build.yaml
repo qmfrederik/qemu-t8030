@@ -1,12 +1,19 @@
 name: build
 on:
   push:
-    branches:
-      - master
   pull_request:
 
 jobs:
-  build_aarch64_softmmu_linux:
+  linux:
+    strategy:
+      matrix:
+        configure_options:
+        # build softmmu target only
+        - "--target-list=aarch64-softmmu --disable-capstone --disable-slirp"
+        # build softmmu target in debug mode
+        - "--target-list=aarch64-softmmu --enable-debug --disable-capstone --disable-slirp"
+        # build all targets
+        - ""
     runs-on: ubuntu-20.04
     container:
       image: ubuntu:focal
@@ -25,7 +32,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          ../configure --target-list=aarch64-softmmu --disable-capstone --disable-slirp
+          ../configure ${{ matrix.configure_options }}
           make -j$(nproc)
 
       - name: Install qemu
@@ -39,8 +46,20 @@ jobs:
           name: aarch64_softmmu_linux
           path: ${{ github.workspace }}/bin/
 
-  build_aarch64_softmmu_macos:
-    runs-on: macos-10.15
+  macos:
+    strategy:
+      matrix:
+        configure_options:
+        # build softmmu target only
+        - "--target-list=aarch64-softmmu --disable-capstone --disable-slirp"
+        # build softmmu target in debug mode
+        - "--target-list=aarch64-softmmu --enable-debug --disable-capstone --disable-slirp"
+        # build all targets
+        - ""
+        macos_image:
+        - "macos-10.15"
+        - "macos-11.0"
+    runs-on: ${{ matrix.macos_image }}
     steps:
       - uses: actions/checkout@v2
         with:
@@ -54,7 +73,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          ../configure --target-list=aarch64-softmmu --disable-capstone --disable-slirp
+          ../configure ${{ matrix.configure_options }}
           make -j$(sysctl -n hw.logicalcpu)
 
       - name: Install qemu
@@ -66,66 +85,4 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: aarch64_softmmu_macos
-          path: ${{ github.workspace }}/bin/
-
-  build_all_linux:
-    runs-on: ubuntu-20.04
-    container:
-      image: ubuntu:focal
-    steps:
-      - name: Install build dependencies
-        run: |
-          export DEBIAN_FRONTEND=noninteractive
-          apt-get update
-          apt-get install -y git libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev ninja-build build-essential
-
-      - uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
-
-      - name: Build qemu
-        run: |
-          mkdir build
-          cd build
-          ../configure
-          make -j$(nproc)
-
-      - name: Install qemu
-        run: |
-          cd build
-          make DESTDIR=$GITHUB_WORKSPACE/bin/ install
-
-      - name: Publish binaries
-        uses: actions/upload-artifact@v2
-        with:
-          name: linux
-          path: ${{ github.workspace }}/bin/
-
-  build_all_macos:
-    runs-on: macos-10.15
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
-
-      - name: Install build dependencies
-        run: |
-          brew install ninja pixman
-
-      - name: Build qemu
-        run: |
-          mkdir build
-          cd build
-          ../configure
-          make -j$(sysctl -n hw.logicalcpu)
-
-      - name: Install qemu
-        run: |
-          cd build
-          make DESTDIR=$GITHUB_WORKSPACE/bin/ install
-
-      - name: Publish binaries
-        uses: actions/upload-artifact@v2
-        with:
-          name: macos
           path: ${{ github.workspace }}/bin/
